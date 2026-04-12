@@ -13,11 +13,10 @@ node benchmark/search-benchmark.js 5000         # custom count
 
 1. **Seed phase** — creates 10 buckets × 5 threads × 20 memos = **1,000 memos** with realistic titles, summaries, and content.
 2. **Embedder warmup** — first real inference loads the `all-MiniLM-L6-v2` model into memory. This is a one-time cost per process, not part of the measured timing.
-3. **Measured runs**:
-   - `search_memos` — hybrid search (FTS5 + vector KNN + RRF)
-   - `search_bucket` — same hybrid search at the bucket level
-   - `search_thread` — same at the thread level
-   - `fetch_memos` — batch fetch of 10 memos by ID (pure SQL, no embedding)
+3. **Measured runs** (all hybrid: FTS5 + vector KNN + RRF):
+   - `search_memos` — hybrid search across memos
+   - `search_bucket` — hybrid search across buckets
+   - `search_thread` — hybrid search across threads
 
 Each benchmark runs 50 warmup iterations (discarded), then the full sample. We report:
 

@@ -96,16 +96,15 @@ The query runs through **both** a vector search (semantic similarity on the summ
 
 ## How fast is it?
 
-Benchmarked on a realistic dataset of **1,000 memos** across 10 buckets and 50 threads, measured over **10,000 queries**:
+Benchmarked on a realistic dataset of **1,000 memos** across 10 buckets and 50 threads, measured over **10,000 hybrid search queries**:
 
 | Operation | Avg latency | p95 | p99 | Throughput |
 |---|---|---|---|---|
-| `search_memos` (hybrid FTS5 + vec + RRF) | **8.88 ms** | 11.91 ms | 15.74 ms | 113 ops/sec |
-| `search_bucket` (hybrid FTS5 + vec + RRF) | **5.62 ms** | 7.35 ms | 9.25 ms | 178 ops/sec |
-| `search_thread` (hybrid FTS5 + vec + RRF) | **13.44 ms** | 20.57 ms | 41.51 ms | 74 ops/sec |
-| `fetch_memos` (batch of 10, by ID) | **0.05 ms** | 0.09 ms | 0.15 ms | 18,207 ops/sec |
+| `search_bucket` (hybrid FTS5 + vec + RRF) | **5.35 ms** | 7.03 ms | 8.57 ms | 187 ops/sec |
+| `search_memos` (hybrid FTS5 + vec + RRF) | **11.14 ms** | 15.06 ms | 19.63 ms | 90 ops/sec |
+| `search_thread` (hybrid FTS5 + vec + RRF) | **14.08 ms** | 17.96 ms | 24.12 ms | 71 ops/sec |
 
-That's **single-digit millisecond hybrid search** — keyword matching, semantic matching, and RRF fusion all in under 10 ms on average. Fetching memos by ID is basically free at ~18k ops/sec.
+That's **single-digit-to-low-teens millisecond hybrid search** at every level of the hierarchy — keyword matching, semantic matching via a 384-dim vector model, and RRF fusion all in roughly the time it takes a human eye to blink.
 
 Re-run the numbers on your own machine:
 

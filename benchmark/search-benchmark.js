@@ -24,7 +24,6 @@ const { createMemo } = require('../functions/memory/memos/create');
 const { searchMemos } = require('../functions/memory/memos/search');
 const { searchBuckets } = require('../functions/memory/buckets/search');
 const { searchThreads } = require('../functions/memory/threads/search');
-const { fetchMemos } = require('../functions/memory/memos/fetch');
 
 
 // Seed data — realistic volumes for a power user (not a stress test)
@@ -191,7 +190,7 @@ async function main() {
 	console.log(`Queries: ${TOTAL_QUERIES.toLocaleString()}  ·  Warmup: ${WARMUP_QUERIES}\n`);
 
 	initSqlite();
-	const { memoIds } = await seed();
+	await seed();
 
 	console.log('\nWarming up embedder (first model invocation downloads ~90MB on fresh install)...');
 	const tWarm = Date.now();
@@ -216,15 +215,6 @@ async function main() {
 		await runBenchmark('search_thread (hybrid: FTS5 + vec + RRF)', async (i) => {
 			await searchThreads(SAMPLE_SUBTOPICS[i % SAMPLE_SUBTOPICS.length]);
 		}, Math.min(TOTAL_QUERIES, 2000))
-	);
-
-	results.push(
-		await runBenchmark('fetch_memos (batch of 10, by ID)', (i) => {
-			const batch = [];
-			for (let j = 0; j < 10; j++) batch.push(memoIds[(i + j) % memoIds.length]);
-			fetchMemos(batch);
-			return Promise.resolve();
-		}, TOTAL_QUERIES)
 	);
 
 	closeSqlite();
