@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-04-12T18:42:17.613Z",
+  "node": "v22.17.1",
+  "platform": "win32-x64",
+  "dataset": {
+    "buckets": 10,
+    "threads": 50,
+    "memos": 1000
+  },
+  "results": [
+    {
+      "label": "search_memos (hybrid: FTS5 + vec + RRF)",
+      "iterations": 10000,
+      "wallSeconds": 88.8113999,
+      "avg": 8.877514870000043,
+      "p50": 8.6488,
+      "p95": 11.906,
+      "p99": 15.7443,
+      "max": 33.7391
+    },
+    {
+      "label": "search_bucket (hybrid: FTS5 + vec + RRF)",
+      "iterations": 2000,
+      "wallSeconds": 11.2479207,
+      "avg": 5.620844399999999,
+      "p50": 5.5574,
+      "p95": 7.3524,
+      "p99": 9.2549,
+      "max": 14.2114
+    },
+    {
+      "label": "search_thread (hybrid: FTS5 + vec + RRF)",
+      "iterations": 2000,
+      "wallSeconds": 26.8930543,
+      "avg": 13.441975899999974,
+      "p50": 12.4054,
+      "p95": 20.5725,
+      "p99": 41.5061,
+      "max": 65.6137
+    },
+    {
+      "label": "fetch_memos (batch of 10, by ID)",
+      "iterations": 10000,
+      "wallSeconds": 0.5492315,
+      "avg": 0.05453757000000008,
+      "p50": 0.0441,
+      "p95": 0.0911,
+      "p99": 0.1497,
+      "max": 7.7827
+    }
+  ]
+}

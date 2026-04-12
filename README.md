@@ -76,6 +76,45 @@ A plain notes folder works — until it doesn't. Here's what you trade away:
 
 No separate database server. No subprocess management. No cloud dependencies. One file, one process.
 
+### How the memory is organized
+
+When the agent is asked to remember something, it routes the information through the enforced Bucket → Thread → Memo hierarchy:
+
+![Memory architecture](assets/memory-architecture.png)
+
+The AI agent picks the right bucket (or creates one), picks the right thread under it, then writes a memo. Every level carries its own vector + BM25 summary, so search can start from any level.
+
+### How search works
+
+Used for **memo, thread, and bucket** searches — same pipeline at every level:
+
+![Search architecture](assets/search-architecture.png)
+
+The query runs through **both** a vector search (semantic similarity on the summary embedding) and an FTS5 / BM25 search (keyword matching). The two ranked lists are merged via **Reciprocal Rank Fusion (RRF)** to produce the final result set. Anything that ranks well in either approach — or both — bubbles to the top.
+
+---
+
+## How fast is it?
+
+Benchmarked on a realistic dataset of **1,000 memos** across 10 buckets and 50 threads, measured over **10,000 queries**:
+
+| Operation | Avg latency | p95 | p99 | Throughput |
+|---|---|---|---|---|
+| `search_memos` (hybrid FTS5 + vec + RRF) | **8.88 ms** | 11.91 ms | 15.74 ms | 113 ops/sec |
+| `search_bucket` (hybrid FTS5 + vec + RRF) | **5.62 ms** | 7.35 ms | 9.25 ms | 178 ops/sec |
+| `search_thread` (hybrid FTS5 + vec + RRF) | **13.44 ms** | 20.57 ms | 41.51 ms | 74 ops/sec |
+| `fetch_memos` (batch of 10, by ID) | **0.05 ms** | 0.09 ms | 0.15 ms | 18,207 ops/sec |
+
+That's **single-digit millisecond hybrid search** — keyword matching, semantic matching, and RRF fusion all in under 10 ms on average. Fetching memos by ID is basically free at ~18k ops/sec.
+
+Re-run the numbers on your own machine:
+
+```bash
+npm run benchmark
+```
+
+See `benchmark/` for full methodology and the latest committed run.
+
 ---
 
 ## Design principle: stay lightweight
