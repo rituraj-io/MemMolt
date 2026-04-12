@@ -1,0 +1,409 @@
+# MemClaw v1.0.0 - Specification
+
+MemClaw is a structured memory system for LLMs (primarily Claude Code). It connects via MCP (Model Context Protocol) and provides an enforced organizational hierarchy with hybrid search using **RRF (Reciprocal Rank Fusion)** over **Vector + BM25** retrieval.
+
+The AI agent is responsible for maintaining all content, titles, and summaries. MemClaw provides the storage, organization, and retrieval infrastructure — the LLM decides what to remember and how to describe it.
+
+---
+
+## Architecture Overview
+
+```
+User <-> AI Agent (Claude Code)
+              |
+              | MCP Protocol
+              |
+         MemClaw Server
+           /        \
+      SQLite       ChromaDB
+     (Source of     (Vector
+      Truth)        Index)
+```
+
+- **SQLite** is the source of truth for all data (buckets, threads, memos)
+- **ChromaDB** mirrors summaries as vector embeddings for semantic search
+- **Vector model**: `all-MiniLM-L6-v2`
+- Every time a SQL record is created/updated/deleted, the corresponding ChromaDB entry is synced (replaced or removed)
+
+---
+
+## Organizational Hierarchy
+
+MemClaw enforces a strict 3-level hierarchy:
+
+```
+Bucket (top-level category)
+  └── Thread (sub-category)
+        └── Memo (document)
+```
+
+### Rules
+
+- A **Thread** must belong to exactly one **Bucket**
+- A **Memo** must belong to exactly one **Thread**
+- Deleting a Bucket **cascades** to all its Threads and Memos
+- Deleting a Thread **cascades** to all its Memos
+
+### Example
+
+```
+Content Creation (Bucket)
+  ├── YouTube (Thread)
+  │     ├── How to create thumbnails - Technique #1 (Memo)
+  │     └── How to create thumbnails - Technique #2 (Memo)
+  ├── Instagram Content (Thread)
+  │     └── Instagram reels (Memo)
+  └── Random Ideas (Thread)
+        └── ... (Memos)
+
+Personal Finances (Bucket)
+  └── ...
+
+Lead Generation (Bucket)
+  └── ...
+```
+
+---
+
+## ID Format
+
+All entities use a prefixed ID scheme:
+
+| Entity | Format | Example |
+|--------|--------|---------|
+| Bucket | `B:<primary-key>` | `B:1`, `B:12` |
+| Thread | `T:<primary-key>` | `T:1`, `T:45` |
+| Memo | `M:<primary-key>` | `M:1`, `M:203` |
+
+The `<primary-key>` is an auto-incrementing Big Integer serial from SQLite.
+
+---
+
+## Database Schemas
+
+### SQLite Tables
+
+**Buckets**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER | Primary key, auto-increment |
+| bucket_id | TEXT | Unique, format `B:<id>` |
+| bucket_name | TEXT | Name of the bucket |
+| bucket_summary | TEXT | Summary of what it contains |
+| created_at | DATETIME | Creation timestamp |
+| updated_at | DATETIME | Last modification timestamp |
+
+**Threads**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER | Primary key, auto-increment |
+| thread_id | TEXT | Unique, format `T:<id>` |
+| thread_name | TEXT | Name of the thread |
+| thread_summary | TEXT | Summary of what it contains |
+| parent_bucket_id | TEXT | NOT NULL, FK to buckets |
+| created_at | DATETIME | Creation timestamp |
+| updated_at | DATETIME | Last modification timestamp |
+
+**Memos**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER | Primary key, auto-increment |
+| memo_id | TEXT | Unique, format `M:<id>` |
+| memo_title | TEXT | Title of the memo |
+| memo_summary | TEXT | Summary of the memo |
+| memo_content | TEXT | Full markdown content |
+| parent_thread_id | TEXT | NOT NULL, FK to threads |
+| created_at | DATETIME | Creation timestamp |
+| updated_at | DATETIME | Last modification timestamp |
+
+### ChromaDB Collections
+
+Three separate collections mirror the SQL tables for vector search:
+
+**Bucket Collection**
+- Document ID: `bucket_id` (e.g. `B:1`)
+- Embedded text: `bucket_summary`
+
+**Thread Collection**
+- Document ID: `thread_id` (e.g. `T:5`)
+- Embedded text: `thread_summary`
+
+**Memo Collection**
+- Document ID: `memo_id` (e.g. `M:42`)
+- Embedded text: `"Title: <title>\n\nSummary: <summary>"`
+
+---
+
+## Memo Structure
+
+Every memo is a Markdown document with required fields:
+
+- **Title** (required) — descriptive name for the memo
+- **Summary** (required) — concise description of what the memo contains
+- **Content** — the full markdown body
+- **FAQ_extra** — optional additional context/tags for improved searchability
+
+The LLM agent is responsible for writing and maintaining titles and summaries. MemClaw does not auto-generate them.
+
+---
+
+## Search System
+
+MemClaw uses **hybrid search** combining Vector similarity and BM25 keyword matching, merged via **Reciprocal Rank Fusion (RRF)**.
+
+### Search Flow
+
+```
+Search Query
+    |
+    ├── Vector Search (ChromaDB)
+    │     └── Semantic similarity via all-MiniLM-L6-v2
+    │
+    ├── BM25 Search (SQLite)
+    │     └── Keyword/term frequency matching
+    │
+    └── RRF Merge
+          └── Combined ranked results
+```
+
+### Two Types of Global Search for Memos
+
+**1. Direct Search** — Search memos directly (bucket & thread agnostic)
+```
+Query: "how to create thumbnails"
+Scope: All memos across all buckets and threads
+Returns: Ranked memo results
+```
+
+**2. Focused Search** — Drill down through the hierarchy
+```
+Step 1: <bucket-id or name>
+Step 2: → <thread-id or name>
+Step 3: → <search query>
+Scope: Only memos within the specified bucket/thread
+```
+
+---
+
+## Features
+
+### Bucket Operations
+
+| Operation | Description |
+|-----------|-------------|
+| **Find** | Search buckets (Vector + BM25 on summaries). Returns list of buckets (limit 20) with summary of what each contains. Lists threads per bucket (limit 5 each). |
+| **Update** | Update name and/or summary of a bucket. If content no longer matches summary, update the summary. |
+| **Create** | Create a new bucket. Requires name + summary of what it will contain. |
+| **Delete** | Delete a bucket. **Cascade deletes** all threads and memos within it. |
+
+### Thread Operations
+
+| Operation | Description |
+|-----------|-------------|
+| **Find** | Search threads (Vector + BM25 on summaries). Returns list of threads (limit 20) with summary and title for each memo. |
+| **Update** | Update name and/or summary of a thread. If content no longer matches summary, update the summary. |
+| **Create** | Create a new thread under a bucket. Requires name + summary. |
+| **Delete** | Delete a thread. **Cascade deletes** all memos within it. |
+| **Move** | Move a thread to a different bucket. |
+
+### Memo Operations
+
+| Operation | Description |
+|-----------|-------------|
+| **Find** | Search memos (Vector + BM25 on summaries). Returns list of memos with title (limit 20) and first 400 characters of content. |
+| **Update** | Update title, summary, and/or content of a memo (whatever fields are provided). Content update has two modes: **1)** Full replace — provide entire new content. **2)** Line edit — provide array of `{ line, content }` objects (1-indexed), supports single or multi-line edits in one call. |
+| **Create** | Create a new memo. Requires: title + summary + content. |
+| **Delete** | Delete a memo. |
+| **Fetch** | Agent passes a list of Memo IDs. Returns the MD content of all requested memos together. |
+| **Move** | Move a memo to a different thread. |
+
+---
+
+## MCP Tools
+
+Each tool returns a response that includes **agent guidance** — contextual hints about what the agent should consider doing next. These are suggestions, not enforced actions. They help the agent maintain data consistency (e.g. updating summaries after moves).
+
+### `status`
+- **Description**: System status + health info
+- **Params**: None
+- **Returns**: Health check, DB connection status, collection counts
+
+### `search_memos`
+- **Description**: Search memos using RRF (Vector + BM25). Optionally scope to a specific bucket and/or thread.
+- **Params**:
+  - `query` (required) — search query
+  - `bucket_id` (optional) — scope search to a specific bucket
+  - `thread_id` (optional) — scope search to a specific thread
+- **Returns**: List of memos (limit 20) with title + first 400 characters of content
+- **Agent guidance**: If results span multiple threads, consider whether the user needs help narrowing down. If no results found, suggest the user try broader terms or check if the right bucket/thread is targeted.
+
+### `fetch_memos`
+- **Description**: Fetch full content of one or more memos by ID
+- **Params**:
+  - `memo_ids` (required) — array of Memo IDs
+- **Returns**: Array of full memo content (MD) for each requested ID
+- **Agent guidance**: None — next action is obvious from user context.
+
+### `search_bucket`
+- **Description**: Find buckets using a query (RRF)
+- **Params**:
+  - `query` (required) — search query
+- **Returns**: List of buckets (limit 20) with summary + threads in each bucket (limit 5 each)
+- **Agent guidance**: None — next action is obvious from user context.
+
+### `search_thread`
+- **Description**: Find threads using a query (RRF)
+- **Params**:
+  - `query` (required) — search query
+- **Returns**: List of threads (limit 20) with summary + memo titles in each
+- **Agent guidance**: None — next action is obvious from user context.
+
+### `update_memo`
+- **Description**: Update a memo's title, summary, and/or content. All fields are optional — only provided fields are updated. Title and summary are straightforward replacements. Content supports two update modes:
+- **Params**:
+  - `memo_id` (required) — ID of the memo
+  - `title` (optional) — new title
+  - `summary` (optional) — new summary
+  - Content update — two mutually exclusive modes:
+    - **Mode 1 — Full replace**: `content` (optional) — provide the entire new content, replaces the existing content completely
+    - **Mode 2 — Line edit**: `line_edits` (optional) — array of `{ line: <number>, content: <string> }` objects. Line numbers are 1-indexed (start from 1, not 0). Each object replaces the content at the specified line. The backend pulls the existing content, applies all line replacements, and writes it back. Use this mode to avoid sending the full content body for large memos.
+      ```json
+      // Example: update lines 3 and 7 of a memo
+      "line_edits": [
+        { "line": 3, "content": "Updated third line" },
+        { "line": 7, "content": "Updated seventh line" }
+      ]
+      ```
+      - If a `line` number exceeds the document's total line count, return an error (do not silently append).
+- **Returns**: Updated memo confirmation
+- **Agent guidance**: If the content changed significantly, consider whether the memo's summary still accurately reflects its contents. If so, update the summary. Also consider whether the parent thread's summary still holds.
+
+### `update_bucket`
+- **Description**: Update a bucket's name and/or summary. Only provided fields are updated.
+- **Params**:
+  - `bucket_id` (required) — ID of the bucket
+  - `name` (optional) — new name
+  - `summary` (optional) — new summary
+- **Returns**: Updated bucket confirmation
+- **Agent guidance**: None — next action is obvious from user context.
+
+### `update_thread`
+- **Description**: Update a thread's name and/or summary. Only provided fields are updated.
+- **Params**:
+  - `thread_id` (required) — ID of the thread
+  - `name` (optional) — new name
+  - `summary` (optional) — new summary
+- **Returns**: Updated thread confirmation
+- **Agent guidance**: If the thread name changed significantly, consider whether the parent bucket's summary still accurately describes its contents.
+
+### `create_bucket`
+- **Description**: Create a new bucket
+- **Params**:
+  - `name` (required) — bucket name
+  - `summary` (required) — description of what this bucket will contain
+- **Returns**: Created bucket with assigned ID
+- **Agent guidance**: None — next action is obvious from user context.
+
+### `create_thread`
+- **Description**: Create a new thread under a bucket
+- **Params**:
+  - `parent_bucket_id` (required) — ID of the parent bucket
+  - `name` (required) — thread name
+  - `summary` (required) — description of what this thread will contain
+- **Returns**: Created thread with assigned ID
+- **Agent guidance**: Consider whether the parent bucket's summary should be updated to reflect this new thread's topic.
+
+### `create_memo`
+- **Description**: Create a new memo under a thread
+- **Params**:
+  - `parent_thread_id` (required) — ID of the parent thread
+  - `title` (required) — memo title
+  - `summary` (required) — memo summary
+  - `content` (required) — full memo content (MD)
+- **Returns**: Created memo with assigned ID
+- **Agent guidance**: Consider whether the parent thread's summary should be updated to reflect this new memo's topic.
+
+### `delete_bucket`
+- **Description**: Delete a bucket and cascade delete all its threads and memos
+- **Params**:
+  - `bucket_id` (required) — ID of the bucket
+- **Returns**: Deletion confirmation with count of deleted threads and memos
+- **Agent guidance**: This is destructive and irreversible. The response should confirm what was deleted (N threads, M memos).
+
+### `delete_thread`
+- **Description**: Delete a thread and cascade delete all its memos
+- **Params**:
+  - `thread_id` (required) — ID of the thread
+- **Returns**: Deletion confirmation with count of deleted memos
+- **Agent guidance**: Consider whether the parent bucket's summary should be updated now that this thread's content is gone.
+
+### `delete_memo`
+- **Description**: Delete a memo
+- **Params**:
+  - `memo_id` (required) — ID of the memo
+- **Returns**: Deletion confirmation
+- **Agent guidance**: Consider whether the parent thread's summary should be updated now that this memo's content is gone.
+
+### `move_thread`
+- **Description**: Move a thread to a different bucket
+- **Params**:
+  - `thread_id` (required) — ID of the thread to move
+  - `new_bucket_id` (required) — ID of the destination bucket
+- **Returns**: Move confirmation
+- **Agent guidance**: Both the source and destination bucket summaries may need updating. The source bucket lost a topic, the destination bucket gained one. Review both summaries and update if they no longer accurately describe their contents.
+
+### `move_memo`
+- **Description**: Move a memo to a different thread
+- **Params**:
+  - `memo_id` (required) — ID of the memo to move
+  - `new_thread_id` (required) — ID of the destination thread
+- **Returns**: Move confirmation
+- **Agent guidance**: Both the source and destination thread summaries may need updating. The source thread lost content, the destination thread gained content. Review both summaries and update if they no longer accurately describe their contents.
+
+---
+
+## Sync & Indexing Flow
+
+```
+Agent writes/updates data
+         |
+         v
+  SQLite updated (source of truth)
+         |
+         v
+  ChromaDB entry replaced/created/deleted
+         |
+         v
+  Vector index reflects current SQL state
+```
+
+The vector indexation is triggered **every time** SQL tables are modified. ChromaDB entries are replaced (not appended), ensuring the vector index always mirrors the SQL source of truth.
+
+---
+
+## Summary Maintenance
+
+The AI agent (Claude Code) is responsible for maintaining summaries at every level:
+
+- **Bucket summaries** — describe the overall topic category
+- **Thread summaries** — describe the sub-topic
+- **Memo summaries** — describe the individual document
+
+When content changes significantly, the agent should update the corresponding summary so that search accuracy is preserved. MemClaw does **not** auto-generate or auto-update summaries.
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Runtime | Node.js |
+| Type checking | JSDoc + TypeScript Compiler |
+| SQL Database | SQLite |
+| Vector Database | ChromaDB |
+| Embedding Model | all-MiniLM-L6-v2 |
+| Protocol | MCP (Model Context Protocol) |
+| Search | Vector + BM25 with RRF |
