@@ -251,6 +251,8 @@ After restarting Claude Code:
 
 **First-run note:** The very first search or create triggers the embedding model download (~90 MB, `all-MiniLM-L6-v2`, cached to disk). Subsequent calls are instant. You'll only pay this cost once per machine.
 
+**Plugin install note:** If you installed MemMolt via `/plugin install memmolt@memmolt`, the first time the MCP server starts it will run `npm install` automatically (~30 seconds) to fetch native dependencies. Claude Code may briefly show *"Failed to reconnect"* during this one-time step — restart Claude Code once and it will connect normally.
+
 ### Troubleshooting
 
 | Symptom | Fix |
