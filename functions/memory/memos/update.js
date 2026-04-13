@@ -1,6 +1,7 @@
 // functions/memory/memos/update.js
 const { getDb } = require('../../../database/sqlite');
 const { syncVector } = require('../../utils/vectorSync');
+const { extractMemoLinks, normalizeMemoLinks, serializeLinks } = require('../../utils/memoLinks');
 
 
 /**
@@ -85,8 +86,15 @@ async function updateMemo({ memo_id, title, summary, content, line_edits }) {
 	}
 
 	if (resolvedContent !== undefined) {
+		// Normalize link headings (human-readable → slug) before persisting,
+		// then derive linked_memos from the canonical content.
+		const normalized = normalizeMemoLinks(resolvedContent);
+
 		fields.push('memo_content = ?');
-		values.push(resolvedContent);
+		values.push(normalized);
+
+		fields.push('linked_memos = ?');
+		values.push(serializeLinks(extractMemoLinks(normalized)));
 	}
 
 	if (fields.length === 0) {

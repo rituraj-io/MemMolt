@@ -1,6 +1,7 @@
 // functions/memory/memos/create.js
 const { getDb } = require('../../../database/sqlite');
 const { syncVector } = require('../../utils/vectorSync');
+const { extractMemoLinks, normalizeMemoLinks, serializeLinks } = require('../../utils/memoLinks');
 
 
 /**
@@ -40,14 +41,19 @@ async function createMemo({ parent_thread_id, title, summary, content }) {
 		throw new Error(`Parent thread not found: ${parent_thread_id}`);
 	}
 
+	// Normalize memo-link headings (e.g. "#My Section" → "#my-section") and
+	// extract the internal refs from the resulting canonical content.
+	const normalizedContent = normalizeMemoLinks(content);
+	const linkedMemos = serializeLinks(extractMemoLinks(normalizedContent));
+
 	const result = /** @type {MemoRecord} */ (
 		db
 			.prepare(
-				`INSERT INTO memos (memo_id, memo_title, memo_summary, memo_content, parent_thread_id)
-				VALUES ('M:' || (SELECT COALESCE(MAX(id), 0) + 1 FROM memos), ?, ?, ?, ?)
+				`INSERT INTO memos (memo_id, memo_title, memo_summary, memo_content, linked_memos, parent_thread_id)
+				VALUES ('M:' || (SELECT COALESCE(MAX(id), 0) + 1 FROM memos), ?, ?, ?, ?, ?)
 				RETURNING *`
 			)
-			.get(title, summary, content, parent_thread_id)
+			.get(title, summary, normalizedContent, linkedMemos, parent_thread_id)
 	);
 
 	// Vector is title + summary, not content

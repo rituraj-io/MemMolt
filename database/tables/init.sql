@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS memos (
     memo_title TEXT NOT NULL,
     memo_summary TEXT NOT NULL,
     memo_content TEXT NOT NULL,
+    linked_memos TEXT NOT NULL DEFAULT '[]',
     parent_thread_id TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

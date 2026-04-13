@@ -1,3 +1,5 @@
+Please read this [Version file](./documentations/VERSION1.0.0.md#summary-maintenance)
+
 ```
   ███╗   ███╗███████╗███╗   ███╗███╗   ███╗ ██████╗ ██╗  ████████╗
   ████╗ ████║██╔════╝████╗ ████║████╗ ████║██╔═══██╗██║  ╚══██╔══╝
@@ -91,6 +93,25 @@ Used for **memo, thread, and bucket** searches — same pipeline at every level:
 ![Search architecture](assets/search-architecture.png)
 
 The query runs through **both** a vector search (semantic similarity on the summary embedding) and an FTS5 / BM25 search (keyword matching). The two ranked lists are merged via **Reciprocal Rank Fusion (RRF)** to produce the final result set. Anything that ranks well in either approach — or both — bubbles to the top.
+
+### How memos interlink
+
+Individual memos don't live in isolation. Once a memo exists, MemMolt gives the agent two ways to traverse the memo graph from it:
+
+![Memo interlinking](assets/memmolt-memo-interlinking.png)
+
+**Direct linking** — the agent writes cross-references directly in a memo's Markdown, using standard link syntax:
+
+```markdown
+The foundations are in [Color theory basics](M:1#heading-2).
+See also the [full intro](M:1).
+```
+
+You can point at a whole memo (`M:1`) or at a specific heading inside it (`M:1#heading-2`). Headings can be written in their natural form — `[x](M:1#My Section)` — and the server normalizes them to GitHub-style slugs (`#my-section`) at save time, so the agent never has to slugify anything. Links inside fenced code blocks or inline code are left alone, and external links like `[doc](./file.md)` are ignored. On every `fetch_memos` call, these refs are resolved to `{ memo_id, heading, memo_title, memo_summary }` so the agent sees exactly where each link points.
+
+**Semantic linking** — on every fetch, MemMolt also runs a vector KNN pass over the fetched memo's own embedding and returns up to **5 semantically similar memos** (cosine similarity ≥ 0.5) in the response. No query, no keyword match — just "what else in your memory is *about* this thing." It's how the agent discovers context that *should* have been linked but wasn't, or material that was captured before the linking concept existed.
+
+Together these two feed the same field on `fetch_memos`: the agent reads a memo and immediately sees (a) the memos this one *explicitly* points at and (b) the memos that are *implicitly* related. From there it can iterate — follow a link, fetch that memo, see its links and neighbors, keep going. The memo graph becomes navigable in both the human-curated direction and the automatic one.
 
 ---
 
@@ -252,12 +273,12 @@ MemMolt exposes 16 MCP tools. The agent doesn't need you to understand these —
 - `search_memos` — find memos by query (optionally scoped to a bucket or thread)
 - `search_bucket` — find buckets
 - `search_thread` — find threads
-- `fetch_memos` — pull full content for a list of memo IDs
+- `fetch_memos` — pull full content for a list of memo IDs, plus the memos they link to (direct) and the memos semantically nearest to them (semantic)
 
 ### Create
 - `create_bucket` — new top-level category
 - `create_thread` — new sub-topic under a bucket
-- `create_memo` — new document under a thread
+- `create_memo` — new document under a thread; content may cross-link other memos with `[text](M:<id>)` or `[text](M:<id>#heading)`
 
 ### Update
 - `update_bucket` — rename or re-describe a bucket

@@ -522,4 +522,227 @@ describe('memos domain', () => {
 			expect(result[0].memo_id).toBe(memo.memo_id);
 		});
 	});
+
+
+	// -------------------------------------------------------------------------
+	// linked_memos column — populated by create + update from content
+	// -------------------------------------------------------------------------
+
+	describe('linked_memos column', () => {
+		it('createMemo stores extracted refs in linked_memos', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+
+			// Target memos first so the links actually resolve to something real
+			const target = await createMemo({ parent_thread_id: thread.thread_id, title: 'Target', summary: 'T', content: 'x' });
+
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Author',
+				summary: 'S',
+				content: `See [target](${target.memo_id}#intro) for details.`,
+			});
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual([`${target.memo_id}#intro`]);
+		});
+
+		it('createMemo stores empty array when content has no memo links', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+			const memo = await createMemo({ parent_thread_id: thread.thread_id, title: 'T', summary: 'S', content: 'plain content' });
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual([]);
+		});
+
+		it('updateMemo recomputes linked_memos when content is replaced', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'T',
+				summary: 'S',
+				content: 'no links yet',
+			});
+
+			await updateMemo({ memo_id: memo.memo_id, content: 'Now linked [to](M:42#section-a).' });
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual(['M:42#section-a']);
+		});
+
+		it('updateMemo recomputes linked_memos when line_edits change a link', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'T',
+				summary: 'S',
+				content: 'Line 1\nLine 2',
+			});
+
+			await updateMemo({
+				memo_id: memo.memo_id,
+				line_edits: [{ line: 2, content: 'Now [linked](M:7).' }],
+			});
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual(['M:7']);
+		});
+
+		it('updateMemo clears linked_memos when new content has no refs', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'T',
+				summary: 'S',
+				content: 'See [m](M:1) and [n](M:2#x).',
+			});
+
+			await updateMemo({ memo_id: memo.memo_id, content: 'no more links' });
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual([]);
+		});
+
+		it('updateMemo leaves linked_memos untouched when only title/summary change', async () => {
+			const db = getDb();
+			const { thread } = await seedThreads();
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'T',
+				summary: 'S',
+				content: 'See [m](M:3#heading).',
+			});
+
+			await updateMemo({ memo_id: memo.memo_id, title: 'New Title' });
+
+			const row = db.prepare('SELECT linked_memos FROM memos WHERE memo_id = ?').get(memo.memo_id);
+			expect(JSON.parse(row.linked_memos)).toEqual(['M:3#heading']);
+		});
+	});
+
+
+	// -------------------------------------------------------------------------
+	// fetchMemos enrichment — linked_memos + similar_memos
+	// -------------------------------------------------------------------------
+
+	describe('fetchMemos enrichment', () => {
+		it('resolves linked_memos with target title + summary + heading', async () => {
+			const { thread } = await seedThreads();
+			const target = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Target Title',
+				summary: 'Target Summary',
+				content: 'target body',
+			});
+			const author = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Author',
+				summary: 'S',
+				content: `Go read [that](${target.memo_id}#section-one).`,
+			});
+
+			const [fetched] = fetchMemos([author.memo_id]);
+
+			expect(fetched.linked_memos).toEqual([
+				{
+					memo_id: target.memo_id,
+					heading: 'section-one',
+					memo_title: 'Target Title',
+					memo_summary: 'Target Summary',
+				},
+			]);
+		});
+
+		it('drops linked refs whose target memo does not exist', async () => {
+			const { thread } = await seedThreads();
+			const author = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Author',
+				summary: 'S',
+				content: 'Broken [link](M:999#ghost).',
+			});
+
+			const [fetched] = fetchMemos([author.memo_id]);
+			expect(fetched.linked_memos).toEqual([]);
+		});
+
+		it('returns empty linked_memos / similar_memos when nothing qualifies', async () => {
+			const { thread } = await seedThreads();
+			const memo = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Unique Alpha',
+				summary: 'Unique Alpha summary',
+				content: 'alpha body',
+			});
+
+			const [fetched] = fetchMemos([memo.memo_id]);
+			expect(fetched.linked_memos).toEqual([]);
+			expect(fetched.similar_memos).toEqual([]);
+		});
+
+		it('returns top-5 similar_memos and excludes self', async () => {
+			const { thread } = await seedThreads();
+
+			// Embedder is mocked on (title + summary), so identical title+summary
+			// produces identical vectors → cosine similarity = 1 (well above the 0.6 threshold).
+			const params = (content) => ({
+				parent_thread_id: thread.thread_id,
+				title: 'Identical Title',
+				summary: 'Identical Summary',
+				content,
+			});
+
+			const m1 = await createMemo(params('c1'));
+			const m2 = await createMemo(params('c2'));
+			const m3 = await createMemo(params('c3'));
+			const m4 = await createMemo(params('c4'));
+			const m5 = await createMemo(params('c5'));
+			const m6 = await createMemo(params('c6'));
+			const m7 = await createMemo(params('c7'));
+
+			const [fetched] = fetchMemos([m1.memo_id]);
+
+			// Self excluded, capped at 5
+			expect(fetched.similar_memos).toHaveLength(5);
+			const ids = fetched.similar_memos.map(s => s.memo_id);
+			expect(ids).not.toContain(m1.memo_id);
+
+			// All picks should come from the pool of siblings
+			const pool = [m2.memo_id, m3.memo_id, m4.memo_id, m5.memo_id, m6.memo_id, m7.memo_id];
+			ids.forEach(id => expect(pool).toContain(id));
+
+			// Each entry has id + title + summary + similarity
+			fetched.similar_memos.forEach(s => {
+				expect(s.memo_title).toBe('Identical Title');
+				expect(s.memo_summary).toBe('Identical Summary');
+				expect(typeof s.similarity).toBe('number');
+				expect(s.similarity).toBeGreaterThanOrEqual(0.5);
+			});
+		});
+
+		it('filters out memos below the similarity threshold', async () => {
+			const { thread } = await seedThreads();
+
+			// Vastly different title+summary pairs → hashes diverge → low similarity.
+			const seed = await createMemo({
+				parent_thread_id: thread.thread_id,
+				title: 'Zebra stripes biology',
+				summary: 'Zoology notes on zebras',
+				content: 'x',
+			});
+
+			// Build unrelated siblings with unrelated title/summary text
+			await createMemo({ parent_thread_id: thread.thread_id, title: 'Quantum chromodynamics', summary: 'Particle physics', content: 'y' });
+			await createMemo({ parent_thread_id: thread.thread_id, title: 'Renaissance art', summary: 'Painting movements', content: 'y' });
+
+			const [fetched] = fetchMemos([seed.memo_id]);
+			// With the deterministic pseudo-random embedder, unrelated hashes almost
+			// never clear cos ≥ 0.6. Assert that the filter is actually applied.
+			expect(fetched.similar_memos.length).toBe(0);
+		});
+	});
 });

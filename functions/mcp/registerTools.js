@@ -58,7 +58,7 @@ const TOOL_DEFINITIONS = [
 	{
 		name: 'fetch_memos',
 		description:
-			'Fetch full content of one or more memos by ID. Pass an array of memo IDs.',
+			'Fetch full content of one or more memos by ID. Pass an array of memo IDs. Each result also includes: (a) linked_memos — memos that the fetched memo cross-references via Markdown links of the form [label](M:<id>) or [label](M:<id>#heading), resolved to { memo_id, heading, memo_title, memo_summary }. Broken refs are dropped silently. (b) similar_memos — up to 5 semantically similar memos (cosine ≥ 0.5) with id/title/summary, for context expansion beyond explicit links. Use fetch_memos iteratively to traverse the memo graph: read a memo, follow its linked_memos or similar_memos, fetch those.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -129,7 +129,8 @@ const TOOL_DEFINITIONS = [
 	},
 	{
 		name: 'create_memo',
-		description: 'Create a new memo under a thread.',
+		description:
+			'Create a new memo under a thread. Content is Markdown. You can cross-link other memos using standard Markdown link syntax: `[anchor text](M:<id>)` or `[anchor text](M:<id>#heading)`. The heading portion may be written in its natural form (e.g. `#My Section`) or pre-slugified (`#my-section`) — the server normalizes it to the GitHub-style slug at save time. Links inside fenced code blocks or inline code are ignored. External links like `[doc](./file.md)` or `[x](https://...)` are left alone.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -141,7 +142,8 @@ const TOOL_DEFINITIONS = [
 				summary: { type: 'string', description: 'Memo summary' },
 				content: {
 					type: 'string',
-					description: 'Full memo content (Markdown)',
+					description:
+						'Full memo content (Markdown). Internal memo refs: `[text](M:<id>)` or `[text](M:<id>#Any Heading)` — headings are slugified server-side.',
 				},
 			},
 			required: ['parent_thread_id', 'title', 'summary', 'content'],
@@ -178,7 +180,7 @@ const TOOL_DEFINITIONS = [
 	{
 		name: 'update_memo',
 		description:
-			'Update a memo title, summary, and/or content. All fields optional. Content has two modes: full replace (provide "content") or line edit (provide "line_edits" array). They are mutually exclusive.',
+			'Update a memo title, summary, and/or content. All fields optional. Content has two modes: full replace (provide "content") or line edit (provide "line_edits" array). They are mutually exclusive. Memo interlinks work the same as in create_memo: use `[text](M:<id>)` or `[text](M:<id>#heading)` — headings are normalized to GitHub-style slugs at save time, so you can write them in natural form.',
 		inputSchema: {
 			type: 'object',
 			properties: {
