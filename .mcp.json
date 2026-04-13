@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "memmolt": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/start.js", "--stdio"]
-    }
-  }
-}

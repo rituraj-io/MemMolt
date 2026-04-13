@@ -12,7 +12,6 @@
     "database/",
     "functions/",
     ".claude-plugin/plugin.json",
-    ".mcp.json",
     "assets/",
     "README.md",
     "LICENSE"

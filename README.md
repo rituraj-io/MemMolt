@@ -153,114 +153,77 @@ If a feature would require a separate service, a heavy dependency, or would noti
 
 ## Getting started
 
-### Install
+### Install as a Claude Code plugin (recommended)
+
+Three commands. Claude Code handles the rest.
+
+```
+/plugin marketplace add rituraj-io/MemMolt
+/plugin install memmolt@memmolt
+/reload-plugins
+```
+
+Run `/mcp` to confirm `plugin:memmolt:memmolt` is connected. Done.
+
+**What happens under the hood:**
+- Claude Code fetches `memmolt@^1.0.1` from npm into its plugin cache and builds the native dependencies (`better-sqlite3`, `sqlite-vec`, `@xenova/transformers`) automatically.
+- The MCP server is registered and started.
+- Your memory is stored at `~/.claude/plugins/data/memmolt/memmolt.sqlite` — **outside the plugin cache**, so it survives plugin updates and reinstalls. You will not lose your memos when MemMolt is updated.
+
+**First-call note:** the first tool call triggers a one-time ~90 MB embedding model download (`all-MiniLM-L6-v2`, cached to disk). Subsequent calls are instant.
+
+### Verify it works
+
+1. `/mcp` — shows `plugin:memmolt:memmolt` connected.
+2. Ask: *"What memory tools do you have?"* — agent lists the MemMolt catalog (`status`, `search_memos`, `create_bucket`, etc.).
+3. Try: *"Remember that my favorite color is blue."* — the agent creates a bucket, thread, and memo. In a new conversation, ask *"What's my favorite color?"* — it searches MemMolt and recalls the answer.
+
+---
+
+### Alternative: install globally via npm
+
+If you want a standalone CLI (e.g., to use MemMolt with Claude Desktop, another MCP client, or via HTTP/SSE):
+
+```bash
+npm install -g memmolt
+```
+
+That gives you a `memmolt` command. Default is stdio; add `--http` for the HTTP/SSE transport.
+
+- **stdio** — wire it into any MCP client's config:
+  ```json
+  {
+    "mcpServers": {
+      "memmolt": { "command": "memmolt", "args": ["--stdio"] }
+    }
+  }
+  ```
+- **HTTP/SSE** — run `memmolt --http` in a terminal and point your client at `http://localhost:3100/sse`.
+
+Memory is stored at `~/.memmolt/memmolt.sqlite` in this mode.
+
+### Alternative: clone and run (contributors)
 
 ```bash
 git clone https://github.com/rituraj-io/MemMolt.git
 cd MemMolt
 npm install
+npm start          # HTTP/SSE on port 3100
+# or:
+node index.js --stdio
 ```
 
-### Run
-
-```bash
-npm start
-```
-
-You should see:
-
-```
-MemMolt MCP server running on http://localhost:3100
-  SSE endpoint:      http://localhost:3100/sse
-  Messages endpoint: http://localhost:3100/messages
-  Health endpoint:   http://localhost:3100/health
-```
-
-That's it. The server is running.
-
-### Connect to Claude Code
-
-You have two scopes to choose from:
-
-- **User scope (global)** — MemMolt is available in *every* Claude Code project. Recommended for personal memory that spans everything you do.
-- **Project scope (local)** — MemMolt is available only inside this one project folder. Useful if you want separate memory per project.
-
-And two transports:
-
-- **stdio** *(recommended)* — Claude Code starts and stops MemMolt automatically per session. Zero setup, always available.
-- **HTTP/SSE** — you run `npm start` yourself; multiple sessions share one server, DB state survives Claude Code restarts.
-
----
-
-#### Global setup with stdio (recommended for most users)
-
-Edit `~/.claude.json` (on Windows: `C:\Users\<you>\.claude.json`). Find the **top-level** `"mcpServers"` object (not the one inside a per-project entry) and add:
-
-```json
-"mcpServers": {
-  "memmolt": {
-    "type": "stdio",
-    "command": "node",
-    "args": ["/absolute/path/to/MemMolt/index.js", "--stdio"]
-  }
-}
-```
-
-Replace `/absolute/path/to/MemMolt` with the actual folder path. Windows paths work too — use forward slashes: `"E:/codes/MemMolt/index.js"`.
-
-Save the file, fully quit and restart Claude Code. Done.
-
-#### Global setup with HTTP/SSE
-
-Same file as above, but entry:
-
-```json
-"memmolt": {
-  "type": "sse",
-  "url": "http://localhost:3100/sse"
-}
-```
-
-Then run `npm start` in the MemMolt folder before launching Claude Code. Leave it running in the background.
-
-#### Project-scoped setup
-
-Create `.mcp.json` in the root of the project where you want MemMolt available:
-
-```json
-{
-  "mcpServers": {
-    "memmolt": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/absolute/path/to/MemMolt/index.js", "--stdio"]
-    }
-  }
-}
-```
-
-Claude Code picks it up automatically when you launch it in that folder.
-
-### Verify the connection
-
-After restarting Claude Code:
-
-1. Run `/mcp` inside Claude Code — you should see `memmolt` listed as connected.
-2. Ask: *"What memory tools do you have?"* — it should list 16 MemMolt tools (status, search_memos, create_bucket, etc).
-3. Try: *"Remember that my favorite color is blue."* — the agent will create a bucket, thread, and memo. Then in a new conversation: *"What's my favorite color?"* — it will search MemMolt and recall it.
-
-**First-run note:** The very first search or create triggers the embedding model download (~90 MB, `all-MiniLM-L6-v2`, cached to disk). Subsequent calls are instant. You'll only pay this cost once per machine.
-
-**Plugin install note:** If you installed MemMolt via `/plugin install memmolt@memmolt`, the first time the MCP server starts it will run `npm install` automatically (~30 seconds) to fetch native dependencies. Claude Code may briefly show *"Failed to reconnect"* during this one-time step — restart Claude Code once and it will connect normally.
+When running from a cloned checkout, memory lives at `<repo>/.db/memmolt.sqlite` (the `.git` marker tells MemMolt it's a dev environment).
 
 ### Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `memmolt` doesn't appear in `/mcp` | Make sure you edited the **top-level** `mcpServers` in `~/.claude.json`, not one of the nested per-project ones. Fully quit and relaunch Claude Code. |
-| "Failed to connect to MCP server memmolt" | Path in `args` is wrong or file doesn't exist. Verify `node /absolute/path/to/MemMolt/index.js --stdio` works from a terminal. |
+| `/mcp` shows *"Failed to reconnect to memmolt"* right after install | Claude Code is still building native deps. Wait ~30 seconds, then `/reload-plugins` and `/mcp` again. |
+| `/mcp` shows two `memmolt` entries, one broken | You have a stale project-scoped `.mcp.json` in your current folder. Delete it; plugin MCP (`plugin:memmolt:memmolt`) is self-sufficient. |
 | Tool calls hang on first use | First embedding model download is in progress (~90 MB). Give it a minute; subsequent calls are instant. |
-| Port 3100 already in use (HTTP/SSE only) | Either something else is using 3100, or another MemMolt instance is already running. Set `MEMCLAW_PORT=3200 npm start` to change it and update the URL in your config. |
+| Port 3100 already in use (HTTP/SSE only) | Another MemMolt or unrelated process is using it. Set `MEMMOLT_PORT=3200` before starting. |
+| Install fails with `EBUSY` on Windows during plugin update | A previous MemMolt process is still running. Kill any `node.exe` whose command line references `memmolt`, delete `~/.claude/plugins/cache/memmolt/`, and retry. Fixed from `1.0.1` onwards via graceful shutdown. |
 
 ---
 
