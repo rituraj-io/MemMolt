@@ -7,7 +7,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js');
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 
-const { initSqlite } = require('./database/sqlite');
+const { initSqlite, closeSqlite } = require('./database/sqlite');
 const { cleanupOrphans } = require('./functions/utils/orphanCleanup');
 const { TOOL_DEFINITIONS, routeToolCall } = require('./functions/mcp/registerTools');
 const { INSTRUCTIONS } = require('./functions/mcp/instructions');
@@ -171,6 +171,23 @@ async function main() {
 	} else {
 		await startHttpSse(server);
 	}
+}
+
+
+// Graceful shutdown: flush SQLite WAL and release file handles before exit.
+// Claude Code sends SIGTERM when replacing the plugin cache on update —
+// without this, dangling locks on the DB file can cause EBUSY on Windows.
+function shutdown() {
+	try { closeSqlite(); } catch { /* ignore */ }
+	process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// When the parent closes our stdin (stdio transport), treat it as a shutdown.
+if (USE_STDIO) {
+	process.stdin.on('close', shutdown);
 }
 
 

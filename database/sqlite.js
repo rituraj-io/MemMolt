@@ -2,16 +2,42 @@ const Database = require('better-sqlite3');
 const sqliteVec = require('sqlite-vec');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 
-// DB path — override via MEMMOLT_DB_PATH env var (e.g. ':memory:' for tests).
-// Otherwise defaults to .db/memmolt.sqlite under project root.
-const DEFAULT_DB_DIR = path.join(__dirname, '..', '.db');
-const DB_PATH = process.env.MEMMOLT_DB_PATH || path.join(DEFAULT_DB_DIR, 'memmolt.sqlite');
+// DB path resolution (priority):
+//   1. MEMMOLT_DB_PATH env var — explicit override (e.g. ':memory:' for tests).
+//   2. ${CLAUDE_PLUGIN_DATA}/memmolt.sqlite — when running as a Claude Code plugin.
+//      Claude Code sets this to a per-plugin persistent directory that survives
+//      updates, so user memory is never wiped when the plugin is reinstalled.
+//   3. <repo>/.db/memmolt.sqlite — when running from a cloned git checkout
+//      (detected by the presence of a .git directory next to package.json). This
+//      preserves the dev workflow for contributors running `npm start` locally.
+//   4. ~/.memmolt/memmolt.sqlite — safe default for `npm install -g memmolt`
+//      and any other install path. Outside any plugin cache so it's never
+//      touched by plugin update/uninstall.
+function resolveDbPath() {
+	if (process.env.MEMMOLT_DB_PATH) return process.env.MEMMOLT_DB_PATH;
 
-// Only create the default dir when using a filesystem path (not for :memory:)
-if (!process.env.MEMMOLT_DB_PATH && !fs.existsSync(DEFAULT_DB_DIR)) {
-	fs.mkdirSync(DEFAULT_DB_DIR, { recursive: true });
+	if (process.env.CLAUDE_PLUGIN_DATA) {
+		return path.join(process.env.CLAUDE_PLUGIN_DATA, 'memmolt.sqlite');
+	}
+
+	const repoRoot = path.join(__dirname, '..');
+	if (fs.existsSync(path.join(repoRoot, '.git'))) {
+		return path.join(repoRoot, '.db', 'memmolt.sqlite');
+	}
+
+	return path.join(os.homedir(), '.memmolt', 'memmolt.sqlite');
+}
+
+const DB_PATH = resolveDbPath();
+
+
+// Ensure the parent dir exists for filesystem-backed paths.
+if (DB_PATH !== ':memory:') {
+	const dir = path.dirname(DB_PATH);
+	if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 
@@ -54,7 +80,7 @@ function getDb() {
 
 
 /**
- * Close the database connection
+ * Close the database connection. Safe to call multiple times.
  */
 function closeSqlite() {
 	if (db) {
@@ -64,4 +90,10 @@ function closeSqlite() {
 }
 
 
-module.exports = { initSqlite, getDb, closeSqlite };
+/**
+ * Resolved DB path (exported for diagnostics / logging).
+ */
+const dbPath = DB_PATH;
+
+
+module.exports = { initSqlite, getDb, closeSqlite, dbPath };

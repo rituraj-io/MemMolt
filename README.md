@@ -71,7 +71,7 @@ A plain notes folder works — until it doesn't. Here's what you trade away:
 
 ## How it works (the quick version)
 
-- Everything lives in **one SQLite file** on your disk (`.db/memclaw.sqlite`).
+- Everything lives in **one SQLite file** on your disk (default: `~/.memmolt/memmolt.sqlite` — see [Configuration](#configuration) for the full resolution order).
 - Summaries are turned into vectors by a local embedding model (**all-MiniLM-L6-v2**, runs in-process, no cloud calls).
 - Search combines keyword matching (**FTS5**) and semantic matching (**sqlite-vec**), then merges them with **Reciprocal Rank Fusion (RRF)**.
 - The agent talks to MemMolt over **MCP** (Model Context Protocol) — the same way Claude Code talks to any other tool.
@@ -353,8 +353,15 @@ npx tsc --noEmit            # Type check (JSDoc + TS compiler)
 
 | Env var | Default | Description |
 |---|---|---|
-| `MEMCLAW_PORT` | `3100` | HTTP/SSE port |
-| `MEMCLAW_DB_PATH` | `.db/memclaw.sqlite` | Path to the SQLite file. Use `:memory:` for tests. |
+| `MEMMOLT_PORT` | `3100` | HTTP/SSE port. |
+| `MEMMOLT_DB_PATH` | *(resolved — see below)* | Path to the SQLite file. Use `:memory:` for tests. |
+
+**Default DB path resolution** (first match wins):
+
+1. `MEMMOLT_DB_PATH` env var, if set.
+2. `${CLAUDE_PLUGIN_DATA}/memmolt.sqlite` — when running as a Claude Code plugin. This is a persistent per-plugin data directory set by Claude Code; **user memory survives plugin updates and reinstalls**.
+3. `<repo>/.db/memmolt.sqlite` — when running from a cloned git checkout (`.git` is present), so contributors running `npm start` locally still get the in-repo `.db/` workflow.
+4. `~/.memmolt/memmolt.sqlite` — safe default for `npm install -g memmolt` and everything else. Never inside any plugin cache.
 
 ### What runs on startup
 

@@ -5,7 +5,7 @@
 // Usage:
 //   node benchmark/search-benchmark.js              # default 10,000 queries
 //   node benchmark/search-benchmark.js 5000         # custom count
-//   MEMCLAW_DB_PATH=:memory: node ...               # in-memory run
+//   MEMMOLT_DB_PATH=:memory: node ...               # in-memory run
 
 const path = require('path');
 const fs = require('fs');
@@ -14,7 +14,7 @@ const fs = require('fs');
 // Use an isolated benchmark DB so we don't clobber the user's real memory
 const BENCH_DB = path.join(__dirname, '.bench.sqlite');
 if (fs.existsSync(BENCH_DB)) fs.unlinkSync(BENCH_DB);
-process.env.MEMCLAW_DB_PATH = BENCH_DB;
+process.env.MEMMOLT_DB_PATH = BENCH_DB;
 
 
 const { initSqlite, closeSqlite } = require('../database/sqlite');

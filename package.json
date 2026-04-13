@@ -1,6 +1,6 @@
 {
   "name": "memmolt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store, exposed via MCP.",
   "main": "index.js",
   "bin": {
