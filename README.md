@@ -145,7 +145,7 @@ MemMolt is designed to be **fast, small, and forgettable**. You shouldn't notice
 - **No background daemons.** No Redis, no Postgres, no vector DB subprocess.
 - **No network chatter.** All search and embedding happens in-process, on your machine.
 - **No memory bloat.** One SQLite file on disk + one small transformer model in RAM (loaded lazily, only when first used).
-- **Fast startup.** The full test suite (127 tests with a real DB) finishes in ~5 seconds. The server itself boots in well under a second.
+- **Fast startup.** The full test suite (176 tests with an in-memory DB + mocked embedder) finishes in ~7 seconds. The server itself boots in well under a second.
 
 If a feature would require a separate service, a heavy dependency, or would noticeably slow things down, we'd rather not add it. The whole point is that MemMolt should **just work in the background** without ever being the bottleneck — of your machine, your workflow, or your agent's context window.
 
@@ -287,17 +287,29 @@ Everything runs locally. No API keys required. No data leaves your machine.
 
 ```
 memmolt/
+├── .claude-plugin/         # Claude Code plugin manifest + marketplace entry
+│   ├── plugin.json
+│   └── marketplace.json
+├── bin/
+│   ├── memmolt.js          # Global CLI entry (exposed via `bin` in package.json)
+│   └── start.js            # Legacy bootstrap (kept as a harmless fallback)
 ├── database/
-│   ├── sqlite.js           # SQLite connector + sqlite-vec loader
+│   ├── sqlite.js           # SQLite connector, DB path resolver, sqlite-vec loader
 │   └── tables/init.sql     # Schema (tables, FTS5, vec0, triggers)
 ├── functions/
 │   ├── memory/             # Domain logic (buckets, threads, memos)
 │   ├── mcp/                # MCP tool handlers (thin wrappers)
 │   └── utils/              # Embedder, RRF, vector sync, orphan cleanup, FTS sanitizer
 ├── tests/                  # Jest unit tests
-├── documentations/         # Version specs
-├── docs/                   # Internal plans & design docs
-├── index.js                # Entry point
+├── benchmark/              # Search-latency benchmark harness
+├── documentations/         # Version specs (VERSION1.0.0.md, etc.)
+├── assets/                 # README architecture diagrams
+├── index.js                # MCP server entry point (stdio + HTTP/SSE)
+├── package.json
+├── tsconfig.json           # JSDoc + TS strict-mode type checking
+├── CLAUDE.md               # Project conventions for Claude Code
+├── CONTRIBUTING.md
+├── LICENSE                 # MIT
 └── README.md
 ```
 
@@ -306,7 +318,7 @@ memmolt/
 ```bash
 npm start                   # Run the server (HTTP/SSE, port 3100)
 node index.js --stdio       # Run with stdio transport
-npm test                    # Jest test suite (127 tests)
+npm test                    # Jest test suite (176 tests)
 npm run test:watch          # Jest in watch mode
 npm run test:coverage       # Tests with coverage report
 npx tsc --noEmit            # Type check (JSDoc + TS compiler)
@@ -337,7 +349,7 @@ npx tsc --noEmit            # Type check (JSDoc + TS compiler)
 Unit tests cover all pure functions in `functions/memory/` and `functions/utils/`.
 The MCP wrappers are thin routing layers and aren't covered by unit tests directly — if the domain functions work, the wrappers do too.
 
-Tests use an in-memory SQLite database and a deterministic mocked embedder, so the full suite runs in ~5 seconds.
+Tests use an in-memory SQLite database and a deterministic mocked embedder, so the full suite of **176 tests** runs in ~7 seconds.
 
 ---
 
