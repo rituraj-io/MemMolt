@@ -1,0 +1,20 @@
+{
+  "name": "memmolt",
+  "version": "1.0.0",
+  "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store, exposed via MCP.",
+  "author": {
+    "name": "Rituraj Phukan"
+  },
+  "homepage": "https://github.com/rituraj-io/MemMolt",
+  "repository": "https://github.com/rituraj-io/MemMolt",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "mcp",
+    "sqlite",
+    "vector-search",
+    "fts5",
+    "rag",
+    "agent-memory"
+  ]
+}

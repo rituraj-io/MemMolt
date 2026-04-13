@@ -18,10 +18,10 @@
       "<rootDir>/tests/setup.js"
     ]
   },
-  "keywords": [],
+  "keywords": ["memory", "mcp", "sqlite", "vector-search", "fts5", "rag", "agent-memory"],
   "author": "Rituraj Phukan",
-  "license": "ISC",
-  "description": "",
+  "license": "MIT",
+  "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store, exposed via MCP.",
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/jest": "^30.0.0",

@@ -1,0 +1,24 @@
+{
+  "name": "memmolt",
+  "owner": {
+    "name": "Rituraj Phukan"
+  },
+  "metadata": {
+    "description": "MemMolt — structured long-term memory for AI agents over MCP."
+  },
+  "plugins": [
+    {
+      "name": "memmolt",
+      "source": ".",
+      "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Rituraj Phukan"
+      },
+      "homepage": "https://github.com/rituraj-io/MemMolt",
+      "license": "MIT",
+      "tags": ["memory", "mcp", "sqlite", "vector-search", "rag"],
+      "category": "productivity"
+    }
+  ]
+}
