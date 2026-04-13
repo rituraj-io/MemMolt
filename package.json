@@ -1,7 +1,22 @@
 {
   "name": "memmolt",
   "version": "1.0.0",
+  "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store, exposed via MCP.",
   "main": "index.js",
+  "bin": {
+    "memmolt": "bin/memmolt.js"
+  },
+  "files": [
+    "index.js",
+    "bin/",
+    "database/",
+    "functions/",
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "assets/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node index.js",
     "test": "jest",
@@ -9,6 +24,20 @@
     "test:coverage": "jest --coverage",
     "benchmark": "node benchmark/search-benchmark.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rituraj-io/MemMolt.git"
+  },
+  "homepage": "https://github.com/rituraj-io/MemMolt#readme",
+  "bugs": {
+    "url": "https://github.com/rituraj-io/MemMolt/issues"
+  },
+  "keywords": ["memory", "mcp", "model-context-protocol", "sqlite", "vector-search", "fts5", "rag", "agent-memory", "claude-code"],
+  "author": "Rituraj Phukan",
+  "license": "MIT",
   "jest": {
     "testEnvironment": "node",
     "testMatch": [
@@ -18,10 +47,6 @@
       "<rootDir>/tests/setup.js"
     ]
   },
-  "keywords": ["memory", "mcp", "sqlite", "vector-search", "fts5", "rag", "agent-memory"],
-  "author": "Rituraj Phukan",
-  "license": "MIT",
-  "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store, exposed via MCP.",
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/jest": "^30.0.0",
