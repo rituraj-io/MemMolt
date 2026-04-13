@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "memmolt",
-      "source": ".",
+      "source": "./",
       "description": "Structured, searchable, long-term memory for AI agents. Hybrid FTS5 + vector search over a local SQLite store.",
       "version": "1.0.0",
       "author": {
